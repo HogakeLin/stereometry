@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Стереометрия: сечения многогранников</title>
+<style>
+  :root { --bg:#121212; --fg:#e8e8ec; --mut:#9a9aa6; --line:rgba(255,255,255,.12); --acc:#2dd4bf; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); overflow:hidden;
+    font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  canvas#c { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  #labels { position:fixed; inset:0; pointer-events:none; overflow:hidden; }
+  .lb { position:absolute; transform:translate(-50%,-50%); font-weight:700; font-size:16px; color:#fff;
+    text-shadow:0 0 4px #000,0 0 8px #000; white-space:nowrap; }
+  .lb sub { font-size:.65em; }
+  .lb.p { font-size:20px; }
+  .lb.q { font-size:15px; color:#ffd54f; } .lb.q.a { color:#ff8a80; }
+
+  #panel { position:fixed; top:16px; left:16px; width:330px; max-height:calc(100% - 32px); display:flex; flex-direction:column;
+    background:rgba(24,24,28,.62); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px);
+    border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 40px rgba(0,0,0,.45); }
+  #head { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; gap:6px; font-weight:600; cursor:pointer; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+  #head span { color:var(--mut); transition:transform .2s; }
+  #panel.closed #head span { transform:rotate(180deg); }
+  #panel.closed #body { display:none; }
+  #body { overflow-y:auto; padding:0 14px 6px; }
+  #info { padding:10px 14px 12px; border-top:1px solid var(--line); color:var(--acc); font-weight:600; }
+  #info small { display:block; color:var(--mut); font-weight:400; font-size:11.5px; margin-top:3px; }
+
+  .seg { display:flex; gap:6px; margin-bottom:10px; }
+  button, select { font:inherit; color:var(--fg); background:rgba(255,255,255,.07); border:1px solid var(--line);
+    border-radius:8px; padding:7px 10px; cursor:pointer; }
+  select { width:100%; margin-top:6px; }
+  select option { background:#1c1c20; }
+  button:hover { background:rgba(255,255,255,.14); }
+  button:disabled { opacity:.4; cursor:default; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline:2px solid var(--acc); outline-offset:1px; }
+  .seg button { flex:1; } .seg button.on { background:var(--acc); color:#06201c; border-color:var(--acc); font-weight:600; }
+
+  .pt { border-left:3px solid var(--c); padding:2px 0 8px 10px; margin-bottom:8px; }
+  .pt h4 { margin:2px 0; font-size:14px; display:flex; align-items:center; gap:8px; }
+  .nm { width:46px; text-align:center; font:700 15px system-ui,sans-serif; color:var(--c); background:rgba(255,255,255,.07);
+    border:1px solid var(--line); border-radius:8px; padding:4px; text-transform:uppercase; }
+  .hr { display:flex; align-items:center; gap:8px; }
+  #cam, #snap { padding:4px 8px; font-size:12px; min-height:34px; white-space:nowrap; }
+  #head > div:first-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #credit { padding:0 14px 10px; text-align:center; font-size:11px; opacity:.4; color:var(--mut); }
+  #toast { position:fixed; top:18px; left:50%; transform:translate(-50%,-20px); z-index:20; max-width:90%; text-align:center;
+    background:rgba(24,24,28,.92); border:1px solid var(--line); padding:10px 16px; border-radius:12px;
+    opacity:0; transition:opacity .3s, transform .3s; pointer-events:none; }
+  #toast.on { opacity:1; transform:translate(-50%,0); }
+  .cl { display:block; color:var(--mut); margin:4px 0 8px; }
+  .sl { display:flex; align-items:center; gap:8px; margin-top:8px; }
+  .sl input { flex:1; accent-color:var(--c); } .sl output { width:36px; text-align:right; color:var(--mut); }
+  .fr { display:flex; gap:5px; margin-top:6px; } .fr button { flex:1; padding:5px 0; }
+  .act { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 8px; } .act button { flex:1 1 40%; padding:10px; font-weight:600; }
+  #build { background:#ff9800; border-color:#ff9800; color:#1d1200; } #build:hover { background:#ffb03a; }
+  #steps { background:var(--acc); border-color:var(--acc); color:#06201c; } #steps:hover { background:#5eead4; }
+
+  @media (max-width:768px) {
+    #panel { top:auto; left:0; right:0; bottom:0; width:auto; max-height:58%; border-radius:18px 18px 0 0; }
+    button, select { min-height:46px; font-size:16px; }
+    .fr button { min-height:44px; } .nm { font-size:16px; } .sl input { height:30px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+
+<div id="panel">
+  <div id="head"><div>Сечение многогранника</div><div class="hr"><button id="cam" title="Вернуть камеру в исходное положение">⌖ Центр</button><button id="snap" title="Сохранить PNG">📷 Снимок</button><span>▾</span></div></div>
+  <div id="body">
+    <div class="seg" id="figs">
+      <button data-f="cube" class="on">Куб</button>
+      <button data-f="tetra">Тетраэдр</button>
+    </div>
+    <label class="cl">Готовые задачи
+      <select id="preset">
+        <option value="custom">Свой выбор</option>
+        <option value="hex">Правильный шестиугольник в кубе</option>
+        <option value="trap">Равнобедренная трапеция в кубе</option>
+        <option value="tri">Правильный треугольник</option>
+        <option value="tetra">Сечение тетраэдра</option>
+      </select>
+    </label>
+    <div id="pts"></div>
+    <label class="cl">Цвет сечения
+      <select id="color">
+        <option value="#ff9800">Оранжевый</option>
+        <option value="#1de9d6">Бирюзовый</option>
+        <option value="#b44cff">Неоновый фиолетовый</option>
+        <option value="#2ecc71">Изумрудный</option>
+        <option value="#ffeb3b">Жёлтый</option>
+      </select>
+    </label>
+    <div class="act">
+      <button id="build">Построить сразу</button>
+      <button id="steps">Построить по шагам</button>
+      <button id="prev">Предыдущий шаг</button>
+      <button id="next">Следующий шаг</button>
+      <button id="auto">▶ Авто</button>
+      <button id="reset">Сбросить сечение</button>
+    </div>
+  </div>
+  <div id="info">Выберите три точки и нажмите «Построить сразу» или «Построить по шагам».</div>
+  <div id="credit">Разработано @IL33MA • Проект по стереометрии</div>
+</div>
+<div id="toast"></div>
+
+<script src="three.min.js"></script>
+<script src="OrbitControls.js"></script>
+<script>
+/* ============================ ДАННЫЕ ФИГУР ============================ */
+
+// Куб со стороной 2, центр в начале координат (ось Y направлена вверх).
+function makeCube() {
+  const names = ['A','B','C','D','A1','B1','C1','D1'];
+  const verts = [[-1,-1,1],[1,-1,1],[1,-1,-1],[-1,-1,-1],[-1,1,1],[1,1,1],[1,1,-1],[-1,1,-1]]
+    .map(a => new THREE.Vector3(...a));
+  const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+  const faces = [[0,1,2,3],[4,5,6,7],[0,1,5,4],[1,2,6,5],[2,3,7,6],[3,0,4,7]];
+  const def = [{m:'e',e:'A–B',t:.5},{m:'e',e:'C–C1',t:.5},{m:'e',e:'D1–A1',t:.5}];
+  return { names, verts, edges, faces, def, a: 2 };
+}
+
+// Правильный тетраэдр с ребром a: основание ABC в горизонтальной плоскости, D — вершина.
+function makeTetra() {
+  const a = 2.6, R = a / Math.sqrt(3), h = a * Math.sqrt(2 / 3);
+  const base = [0, 1, 2].map(i => new THREE.Vector3(R*Math.cos(i*2*Math.PI/3), -h/4, R*Math.sin(i*2*Math.PI/3)));
+  const verts = [...base, new THREE.Vector3(0, 3*h/4, 0)];
+  const edges = [[0,1],[1,2],[2,0],[0,3],[1,3],[2,3]];
+  const faces = [[0,1,2],[0,1,3],[1,2,3],[2,0,3]];
+  const def = [{m:'e',e:'A–B',t:.5},{m:'e',e:'B–C',t:.5},{m:'e',e:'C–D',t:.5}];
+  return { names:['A','B','C','D'], verts, edges, faces, def, a };
+}
+
+/* ============================ СЦЕНА ============================ */
+const canvas = document.getElementById('c'), panel = document.getElementById('panel');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x121212);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(4.2, 3.4, 5.2);
+const controls = new THREE.OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.minDistance = 3.5; controls.maxDistance = 11;
+scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(4, 8, 5); scene.add(sun);
+
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  // На смартфонах шторка внизу: сдвигаем кадр вверх на половину её высоты, фигура остаётся над шторкой
+  const off = w <= 768 ? Math.round(panel.offsetHeight / 2) : 0;
+  camera.setViewOffset(w, h, 0, off, w, h);
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+new ResizeObserver(resize).observe(panel);
+window.addEventListener('load', resize);   // после полной загрузки вёрстки высота шторки точная
+
+/* ============================ СОСТОЯНИЕ ============================ */
+const COL = ['#ff2bd6', '#39ff14', '#00e5ff'], LAB = ['M', 'N', 'K'];
+const FR = [['1/4', .25], ['1/3', 1/3], ['1/2', .5], ['2/3', 2/3]];
+const sub = s => s.replace(/(\d)/g, '<sub>$1</sub>');
+const ruN = { 3:'треугольник', 4:'четырёхугольник', 5:'пятиугольник', 6:'шестиугольник' };
+
+let fig, figGroup, secGroup = null, pts = [], vLabels = [], pLabels = [], markers = [], grid = null;
+let secLabels = [], step = null, anim = null, auto = false, autoTimer = 0;
+const labelsBox = document.getElementById('labels');
+const ptsBox = document.getElementById('pts'), info = document.getElementById('info'), presetSel = document.getElementById('preset');
+
+function addLabel(html, cls) {
+  const el = document.createElement('div'); el.className = 'lb ' + (cls || ''); el.innerHTML = html;
+  labelsBox.appendChild(el); return el;
+}
+function disposeGroup(g) {
+  scene.remove(g);
+  g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+}
+
+/* ============================ ПОСТРОЕНИЕ ФИГУРЫ ============================ */
+function setFigure(type) {
+  fig = type === 'cube' ? makeCube() : makeTetra();
+  if (figGroup) disposeGroup(figGroup);
+  if (grid) scene.remove(grid);
+  clearSection();
+  vLabels.forEach(l => l.el.remove()); vLabels = [];
+
+  figGroup = new THREE.Group();
+  // Полупрозрачные грани (каждая грань разбита на треугольники веером)
+  const pos = [], idx = [];
+  fig.verts.forEach(v => pos.push(v.x, v.y, v.z));
+  fig.faces.forEach(f => { for (let i = 1; i < f.length - 1; i++) idx.push(f[0], f[i], f[i+1]); });
+  const gF = new THREE.BufferGeometry();
+  gF.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); gF.setIndex(idx); gF.computeVertexNormals();
+  figGroup.add(new THREE.Mesh(gF, new THREE.MeshPhongMaterial({
+    color: 0x4aa3ff, transparent: true, opacity: .25, side: THREE.DoubleSide, depthWrite: false })));
+  // Чёткие белые рёбра
+  const ep = []; fig.edges.forEach(([a, b]) => ep.push(fig.verts[a], fig.verts[b]));
+  figGroup.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(ep), new THREE.LineBasicMaterial({ color: 0xffffff })));
+  scene.add(figGroup);
+
+  const minY = Math.min(...fig.verts.map(v => v.y));
+  grid = new THREE.GridHelper(10, 10, 0x4a4a52, 0x2a2a30); grid.position.y = minY - 0.001; scene.add(grid);
+
+  // Метки вершин — HTML-оверлей, чуть вынесены от центра наружу
+  fig.verts.forEach((v, i) => vLabels.push({ el: addLabel(sub(fig.names[i])), pos: v.clone().multiplyScalar(1.15) }));
+
+  // Начальные точки сечения
+  pts = fig.def.map((d, i) => ({ name: pts[i] ? pts[i].name : LAB[i], m: d.m, v: 0, e: fig.edges.findIndex(([a, b]) => fig.names[a] + '–' + fig.names[b] === d.e), t: d.t }));
+  buildUI(); updateMarkers(); presetSel.value = 'custom';
+  info.textContent = 'Выберите три точки и нажмите «Построить сразу» или «Построить по шагам».';
+}
+
+/* ============================ ТОЧКИ СЕЧЕНИЯ ============================ */
+// Положение точки: либо вершина, либо P = A + t·(B − A) на выбранном ребре
+function pointPos(p) {
+  if (p.m === 'v') return fig.verts[p.v].clone();
+  const [a, b] = fig.edges[p.e], t = Math.min(1, Math.max(0, +p.t || 0));   // положение на ребре: A + t·(B − A)
+  return fig.verts[a].clone().lerp(fig.verts[b], t);
+}
+// Индекс вершины фигуры, с которой совпадает точка (или −1) и «видимое» имя исходной точки
+const vertexAt = P => fig.verts.findIndex(v => v.distanceTo(P) < 1e-6);
+const srcName = p => { const j = vertexAt(pointPos(p)); return j >= 0 ? fig.names[j] : p.name; };
+
+function buildUI() {
+  ptsBox.innerHTML = '';
+  pts.forEach((p, i) => {
+    const d = document.createElement('div'); d.className = 'pt'; d.style.setProperty('--c', COL[i]);
+    d.innerHTML = `<h4>Точка ${i + 1} <input class="nm" data-k="name" maxlength="1" autocomplete="off" spellcheck="false" aria-label="Буква точки ${i + 1}"></h4>
+      <select data-k="m"><option value="v">Вершина</option><option value="e">Точка на ребре</option></select>
+      <select data-k="v" class="vs">${fig.names.map((n, j) => `<option value="${j}">${n}</option>`).join('')}</select>
+      <div class="er"><select data-k="e">${fig.edges.map(([a, b], j) => `<option value="${j}">${fig.names[a]}–${fig.names[b]}</option>`).join('')}</select>
+      <div class="sl"><input type="range" data-k="t" min="0" max="1" step="0.01"><output></output></div>
+      <div class="fr">${FR.map(f => `<button data-t="${f[1]}">${f[0]}</button>`).join('')}</div></div>`;
+    const sync = () => {
+      d.querySelectorAll('[data-k]').forEach(el => el.value = p[el.dataset.k]);
+      d.querySelector('.vs').style.display = p.m === 'v' ? '' : 'none';
+      d.querySelector('.er').style.display = p.m === 'e' ? '' : 'none';
+      d.querySelector('output').textContent = (+p.t).toFixed(2);
+    };
+    d.addEventListener('input', e => {
+      const k = e.target.dataset.k; if (!k) return;
+      if (k === 'name') {   // только одна заглавная латинская буква
+        const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 1);
+        if (v && v !== p.name && (pts.some((q, j) => j !== i && q.name === v) || fig.names.includes(v))) {
+          toast(`Буква ${v} уже занята`, 2000); e.target.value = p.name; return;   // отмена ввода, прежняя буква сохраняется
+        }
+        e.target.value = v; if (v) { p.name = v; changed(); } return;
+      }
+      p[k] = k === 'm' ? e.target.value : +e.target.value; sync(); changed();
+    });
+    d.addEventListener('click', e => {
+      if (e.target.dataset.t) { p.t = +e.target.dataset.t; sync(); changed(); }
+    });
+    d.addEventListener('focusin', e => { if (e.target.dataset.k === 'name') e.target.select(); });
+    d.addEventListener('focusout', e => { if (e.target.dataset.k === 'name') e.target.value = p.name; });
+    sync(); ptsBox.appendChild(d);
+  });
+}
+
+// Неоновые сферы и метки M, N, K
+function updateMarkers() {
+  markers.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }); markers = [];
+  pLabels.forEach(l => l.el.remove()); pLabels = [];
+  pts.forEach((p, i) => {
+    const P = pointPos(p);
+    const s = new THREE.Mesh(new THREE.SphereGeometry(vertexAt(P) >= 0 ? .11 : .085, 20, 16),
+      new THREE.MeshBasicMaterial({ color: COL[i], depthTest: false }));
+    s.position.copy(P); s.renderOrder = 10; scene.add(s); markers.push(s);
+    if (vertexAt(P) < 0) {   // у вершины остаётся только её родная метка (A1, B…) — без дубля M/N/K
+      const el = addLabel(p.name, 'p'); el.style.color = COL[i];
+      pLabels.push({ el, pos: outward(P, .3) });
+    }
+  });
+}
+function changed() {
+  presetSel.value = 'custom'; clearSection(); updateMarkers();
+  info.textContent = 'Нажмите «Построить сразу» или «Построить по шагам».';
+}
+
+/* ============================ МАТЕМАТИКА СЕЧЕНИЯ ============================ */
+
+// Уравнение плоскости по трём точкам: normal = (P2 − P1) × (P3 − P1), D = −normal·P1.
+// Возвращает null, если точки лежат на одной прямой (нормаль нулевая).
+function planeFrom3(P1, P2, P3) {
+  const n = new THREE.Vector3().subVectors(P2, P1).cross(new THREE.Vector3().subVectors(P3, P1));
+  if (n.length() < 1e-9) return null;
+  return { n, D: -n.dot(P1), P1 };
+}
+
+// Пересечение плоскости со всеми рёбрами. Ребро A→B: точка X(t) = A + t(B − A).
+// Подставляем в Ax+By+Cz+D=0: t = d1/(d1−d2), где d = n·(X − P1) — знаковое расстояние (с точностью до |n|).
+function intersectEdges(pl, verts, edges) {
+  const EPS = 1e-7, nl = pl.n.length(), res = [];
+  const add = p => { if (!res.some(q => q.distanceTo(p) < 1e-6)) res.push(p); };
+  edges.forEach(([i, j]) => {
+    const A = verts[i], B = verts[j];
+    // d = n·(V − P1) / |n| — знаковое расстояние от вершины до плоскости
+    const d1 = pl.n.dot(new THREE.Vector3().subVectors(A, pl.P1)) / nl;
+    const d2 = pl.n.dot(new THREE.Vector3().subVectors(B, pl.P1)) / nl;
+    if (Math.abs(d1) < EPS && Math.abs(d2) < EPS) { add(A.clone()); add(B.clone()); }   // ребро лежит в плоскости
+    else if (Math.abs(d1) < EPS) add(A.clone());                                          // плоскость проходит через A
+    else if (Math.abs(d2) < EPS) add(B.clone());                                          // плоскость проходит через B
+    else if (d1 * d2 < -1e-7) add(A.clone().lerp(B, d1 / (d1 - d2)));                     // строго внутри ребра
+  });
+  return res;
+}
+
+// Сортировка точек по полярному углу вокруг центроида в плоскости сечения.
+// Базис плоскости: u — от центра к первой точке, v = n × u (оба лежат в плоскости).
+function sortByAngle(points, n) {
+  const c = points.reduce((s, p) => s.add(p), new THREE.Vector3()).divideScalar(points.length);
+  const u = new THREE.Vector3().subVectors(points[0], c).normalize();
+  const v = new THREE.Vector3().crossVectors(n, u).normalize();
+  const ang = p => { const r = new THREE.Vector3().subVectors(p, c); return Math.atan2(r.dot(v), r.dot(u)); };
+  return { c, sorted: points.slice().sort((a, b) => ang(a) - ang(b)) };
+}
+
+/* ============================ ОТРИСОВКА СЕЧЕНИЯ ============================ */
+const btnNext = document.getElementById('next'), btnAuto = document.getElementById('auto'), btnPrev = document.getElementById('prev');
+const HOME = new THREE.Vector3(4.2, 3.4, 5.2);                       // исходное положение камеры
+const RESERVE = ['X','Y','Z','P','Q','R','S','T','L','F','E'];        // резерв букв для новых точек
+let secColor = '#ff9800', camAnim = null;
+const lineCol = () => new THREE.Color(secColor).lerp(new THREE.Color(0xffffff), .45);   // контур светлее заливки
+
+// Вынос точки от центра фигуры наружу вдоль радиус-вектора (для 3D-позиции метки)
+function outward(P, d) {
+  const v = P.clone(); if (v.length() < 1e-6) v.set(0, 1, 0);
+  return P.clone().add(v.normalize().multiplyScalar(d));
+}
+
+function syncBtns() {
+  const done = !!(step && step.done);
+  btnNext.disabled = btnAuto.disabled = done;
+  btnPrev.disabled = !step || (step.i === 0 && !step.done);
+  btnAuto.textContent = auto ? '❚❚ Пауза' : '▶ Авто';
+}
+
+function clearSection() {
+  clearTimeout(autoTimer); auto = false; anim = null; step = null;
+  if (secGroup) { disposeGroup(secGroup); secGroup = null; }
+  secLabels.forEach(l => l.el.remove()); secLabels = [];
+  syncBtns();
+}
+
+// Светящаяся точка; метка — только у НОВЫХ точек (aux = вспомогательная точка следа вне фигуры)
+function addSecPoint(p, name, isNew, aux) {
+  if (aux) {   // внешняя точка следа: нейтральный серый шар без ореола и буквы
+    const m = new THREE.Mesh(new THREE.SphereGeometry(.055, 14, 10), new THREE.MeshBasicMaterial({ color: 0x9e9ea8, depthTest: false }));
+    m.position.copy(p); m.renderOrder = 9; m.userData.aux = true; secGroup.add(m); return;
+  }
+  const core = new THREE.Mesh(new THREE.SphereGeometry(.06, 16, 12), new THREE.MeshBasicMaterial({ color: 0xfff176, depthTest: false }));
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(.14, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffc400, transparent: true, opacity: .28, depthTest: false, depthWrite: false }));
+  [core, halo].forEach(o => { o.position.copy(p); o.renderOrder = 9; secGroup.add(o); });
+  if (isNew) secLabels.push({ el: addLabel(sub(name), 'q'), pos: outward(p, .28) });
+}
+
+// Имена точек сечения в порядке обхода: исходная точка → её буква; вершина → её имя; иначе — буква из резерва
+function nameSection(sorted) {
+  const used = new Set([...pts.map(p => p.name), ...fig.names]);
+  const free = RESERVE.filter(l => !used.has(l));
+  const src = pts.map(pointPos);
+  return sorted.map(p => {
+    let j = fig.verts.findIndex(q => q.distanceTo(p) < 1e-6);
+    if (j >= 0) return { name: fig.names[j], isNew: false };            // в вершине — родное имя вершины
+    j = src.findIndex(q => q.distanceTo(p) < 1e-6);
+    if (j >= 0) return { name: pts[j].name, isNew: false };
+    return { name: free.shift() || '?', isNew: true };
+  });
+}
+
+// Расчёт сечения с валидацией (совпадающие точки, коллинеарность, пустое сечение)
+function prepareSection() {
+  clearSection();
+  const P = pts.map(pointPos);
+  if (P.some((a, i) => P.some((b, j) => j > i && a.distanceTo(b) < 0.001))) {
+    info.textContent = 'Ошибка: выбраны совпадающие точки. Секущая плоскость не определена'; return null;
+  }
+  const pl = planeFrom3(P[0], P[1], P[2]);
+  if (!pl) { info.innerHTML = 'Плоскость не определена<small>Точки лежат на одной прямой.</small>'; return null; }
+  const found = intersectEdges(pl, fig.verts, fig.edges);
+  if (found.length < 3) { info.innerHTML = 'Сечения нет<small>Плоскость не пересекает фигуру по площади.</small>'; return null; }
+  const { c, sorted } = sortByAngle(found, pl.n);
+  secGroup = new THREE.Group(); scene.add(secGroup);
+  return { pl, c, sorted, labs: nameSection(sorted) };
+}
+
+// Финал: заливка, буквенное обозначение, периметр и уравнение плоскости
+function finishSection({ pl, c, sorted, labs }) {
+  const pos = [c.x, c.y, c.z], idx = [];
+  sorted.forEach((p, i) => { pos.push(p.x, p.y, p.z); idx.push(0, i + 1, (i + 1) % sorted.length + 1); });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  // Контур замыкается яркой линией по всем вершинам сечения — до наложения заливки
+  const outline = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(sorted), new THREE.LineBasicMaterial({ color: lineCol() }));
+  outline.userData.role = 'line'; secGroup.add(outline);
+  const fill = new THREE.Mesh(g, new THREE.MeshBasicMaterial({
+    color: secColor, transparent: true, opacity: .6, side: THREE.DoubleSide, depthWrite: false }));
+  fill.userData.role = 'fill'; secGroup.add(fill);
+  secGroup.traverse(o => { if (o.userData.dashed || o.userData.aux) o.visible = false; });   // в финале — только контур и заливка (при «Предыдущий шаг» всё возвращается)
+  const r = x => (Math.round(x * 100) / 100).toString(), n = sorted.length;
+  let per = 0; sorted.forEach((p, i) => per += p.distanceTo(sorted[(i + 1) % n]));   // периметр = сумма длин сторон
+  info.innerHTML = `Полученное сечение: ${ruN[n] || n + '-угольник'} ${labs.map(l => sub(l.name)).join('')}
+    <small>Периметр ≈ ${per.toFixed(2)} (при ребре a = ${fig.a})</small>
+    <small>${r(pl.n.x)}·x + ${r(pl.n.y)}·y + ${r(pl.n.z)}·z + ${r(pl.D)} = 0</small>`;
+}
+
+function applyColor() {
+  if (!secGroup) return;
+  secGroup.traverse(o => {
+    if (o.userData.role === 'fill') o.material.color.set(secColor);
+    else if (o.userData.role === 'line') o.material.color.copy(lineCol());
+  });
+}
+
+// «Построить сразу»
+function buildSection() {
+  const s = prepareSection(); if (!s) return;
+  s.sorted.forEach((p, i) => addSecPoint(p, s.labs[i].name, s.labs[i].isNew));
+  finishSection(s);
+  // Состояние «построение завершено»: кнопка «Предыдущий шаг» сразу активна и отматывает шаги назад
+  const plan = buildPlan(s);
+  step = { s, plan, i: plan.length, busy: false, done: true, shown: [] };
+  syncBtns();
+}
+
+/* ---------- Школьный метод построения сечения (по учебнику 10 класса) ----------
+   Правила, по которым появляется каждая новая точка:
+   (а) Две известные точки лежат в одной грани → проводим след (прямую в плоскости грани). Точки, где она
+       пересекает рёбра грани, — вершины сечения. Если прямая пересекает продолжение ребра, получаем точку следа,
+       которая лежит и в смежной грани → через неё и известную точку проводим прямую в этой грани.
+   (б) Параллельные грани плоскость сечения пересекает по параллельным прямым (в т.ч. прямая, параллельная ребру
+       смежной грани, даёт в этой грани параллельную ей прямую).
+   (в) Если никакие две известные точки не лежат в одной грани — прямую через две точки пересекаем с плоскостью
+       грани, где лежит третья точка (через прямую проводится вспомогательная плоскость), и строим след в этой грани. */
+function buildPlan(s) {
+  const EPS = 1e-6, d3 = (a, b) => new THREE.Vector3().subVectors(a, b);
+  const F = fig.faces.map(f => ({ f, v0: fig.verts[f[0]],
+    n: d3(fig.verts[f[1]], fig.verts[f[0]]).cross(d3(fig.verts[f[2]], fig.verts[f[0]])).normalize(), name: f.map(i => fig.names[i]).join('') }));
+  const inF = (g, p) => Math.abs(g.n.dot(d3(p, g.v0))) < EPS;
+  const labOf = p => { const i = s.sorted.findIndex(q => q.distanceTo(p) < EPS); return i < 0 ? null : s.labs[i]; };
+  const known = pts.map(p => ({ p: pointPos(p), name: srcName(p) }));
+  const find = p => known.find(k => k.p.distanceTo(p) < EPS);
+  const addKnown = (p, lab) => { if (lab && !find(p)) known.push({ p, name: lab.name }); };
+  const plan = [], chords = [], chordFaces = new Set(), done = new Set(), auxDone = new Set(), parTried = new Set();
+  const nameE = (i, j) => sub(fig.names[i] + fig.names[j]);
+  const PAR = F.some((a, i) => F.some((b, j) => j > i && Math.abs(a.n.dot(b.n)) > 1 - 1e-9));   // есть ли параллельные грани (куб)
+  const commonF = (A, B) => F.filter(g => inF(g, A) && inF(g, B));
+
+  // Пересечение прямой (A, dir) с прямыми, содержащими рёбра грани g (всё в плоскости грани)
+  function chordIn(g, A, dir) {
+    const hits = [];
+    g.f.forEach((i, k) => {
+      const j = g.f[(k + 1) % g.f.length], E0 = fig.verts[i], e = d3(fig.verts[j], E0), c = new THREE.Vector3().crossVectors(dir, e), cl = c.lengthSq();
+      if (cl < 1e-12) return;                                   // прямая параллельна ребру
+      const u = d3(E0, A).cross(dir).dot(c) / cl;               // параметр точки на прямой ребра (0…1 — внутри ребра)
+      hits.push({ u, i, j, p: E0.clone().addScaledVector(e, u) });
+    });
+    const ends = [];
+    hits.filter(h => h.u > -EPS && h.u < 1 + EPS).forEach(h => { if (!ends.some(e => e.p.distanceTo(h.p) < EPS)) ends.push(h); });
+    ends.sort((x, y) => d3(x.p, A).dot(dir) - d3(y.p, A).dot(dir));
+    return { hits, ends };
+  }
+  // Обоснование новой вершины
+  const endText = (h, ln) => {
+    const vi = fig.verts.findIndex(v => v.distanceTo(h.p) < EPS), lab = labOf(h.p);
+    return vi >= 0 ? `прямая ${ln} проходит через вершину ${sub(fig.names[vi])}`
+      : `точка ${sub(lab ? lab.name : '?')} — пересечение прямой ${ln} с прямой ребра ${nameE(h.i, h.j)}`;
+  };
+  // След в грани g; отрезок растёт от конца, ближайшего к origin, к другому концу
+  function makeChord(g, A, dir, ln, head, origin) {
+    const { hits, ends } = chordIn(g, A, dir);
+    if (ends.length < 2) return null;
+    const chord = [ends[0].p, ends[ends.length - 1].p];
+    if (chord[0].distanceTo(origin) > chord[1].distanceTo(origin)) chord.reverse();
+    const fresh = ends.filter(h => !find(h.p));
+    ends.forEach(h => addKnown(h.p, labOf(h.p)));
+    chordFaces.add(g);
+    const nm = chord.map(q => (labOf(q) || { name: '?' }).name);
+    chords.push({ g, dir: d3(chord[1], chord[0]).normalize(), label: sub(nm[0]) + sub(nm[1]) });
+    const st = { segs: [{ A: chord[0], B: chord[1] }], note: '',
+      pts: ends.map(h => ({ p: h.p, lab: labOf(h.p) })).filter(x => x.lab).map(x => ({ p: x.p, name: x.lab.name, isNew: x.lab.isNew })),
+      html: head + (fresh.length ? `<small>${fresh.map(h => endText(h, ln)).join('; ')}.</small>` : '') };
+    return { st, hits, chord };
+  }
+  const ref = k => k.aux ? 'найденная точка пересечения' : 'точка ' + sub(k.name);
+  function describe(KA, KB, g) {   // формулировка без букв для внешних точек следа
+    if (!KA.aux && !KB.aux) { const ln = sub(KA.name) + sub(KB.name); return { ln, head: `точки ${sub(KA.name)} и ${sub(KB.name)} лежат в грани ${sub(g.name)}. Проводим след ${ln}` }; }
+    if (KA.aux && KB.aux) return { ln: '(через найденные точки)', head: `найденные точки пересечения лежат в грани ${sub(g.name)}. Проводим через них след` };
+    const real = KA.aux ? KB : KA;
+    return { ln: `(через ${sub(real.name)} и найденную точку)`, head: `${ref(real)} и найденная точка пересечения лежат в грани ${sub(g.name)}. Проводим через них след` };
+  }
+  // Правило (а): продолжение следа до прямой ребра → точка следа в смежной грани, где есть известная точка
+  function findExt(g, hits, chord, fixedEnd) {
+    for (const h of hits.filter(h => h.u < -EPS || h.u > 1 + EPS)) {
+      const g2 = F.find(x => x !== g && x.f.includes(h.i) && x.f.includes(h.j));
+      const C = g2 && !chordFaces.has(g2) && known.find(k => inF(g2, k.p) && !inF(g, k.p));
+      const far = h.p.length() > 3.5;   // у куба слишком далёкие точки обходим через параллельность граней
+      if (!C || find(h.p) || (far && PAR)) continue;
+      const near = h.p.distanceTo(chord[0]) < h.p.distanceTo(chord[1]) ? 0 : 1;
+      if (fixedEnd >= 0 && near !== fixedEnd) continue;           // карандаш не должен возвращаться назад
+      const T = { p: h.p.clone(), name: '', aux: true, used: false };
+      known.push(T);
+      const V = [fig.verts[h.i], fig.verts[h.j]].sort((a, b) => a.distanceTo(T.p) - b.distanceTo(T.p))[0];   // ближайшая вершина ребра
+      return { T, near, V, h, g2, C };
+    }
+    return null;
+  }
+  // Правило (б): параллельные грани / ребро, параллельное следу
+  function tryParallel() {
+    for (const c of chords) for (const g2 of F) {
+      if (g2 === c.g || chordFaces.has(g2) || parTried.has(c.label + g2.name)) continue;
+      const Q = known.find(k => !k.aux && inF(g2, k.p)) || known.find(k => inF(g2, k.p)); if (!Q) continue;
+      const qn = Q.aux ? 'найденную точку пересечения' : 'точку ' + sub(Q.name), qs = Q.aux ? 'найденную точку' : sub(Q.name);
+      let head = null;
+      if (Math.abs(g2.n.dot(c.g.n)) > 1 - 1e-9)
+        head = `Грани ${sub(c.g.name)} и ${sub(g2.name)} параллельны, поэтому секущая плоскость пересекает их по параллельным прямым. Через ${qn} проводим прямую, параллельную следу ${c.label}`;
+      else {
+        const e = c.g.f.map((i, k) => [i, c.g.f[(k + 1) % c.g.f.length]]).find(([i, j]) =>
+          g2.f.includes(i) && g2.f.includes(j) && d3(fig.verts[j], fig.verts[i]).cross(c.dir).length() < 1e-9);
+        if (e) head = `След ${c.label} параллелен ребру ${nameE(e[0], e[1])} грани ${sub(g2.name)}, поэтому секущая плоскость пересекает эту грань по прямой, параллельной ${c.label}. Через ${qn} проводим её`;
+      }
+      if (!head) continue;
+      parTried.add(c.label + g2.name);
+      const r = makeChord(g2, Q.p, c.dir, `(через ${qs} ∥ ${c.label})`, head, Q.p);
+      if (r) { Q.used = true; return r.st; }
+    }
+    return null;
+  }
+  // Правило (в): точки без общей грани
+  function tryAuxPlane() {
+    for (let a = 0; a < known.length; a++) for (let b = a + 1; b < known.length; b++) {
+      const key = a + '-' + b, KA = known[a], KB = known[b];
+      if (auxDone.has(key) || commonF(KA.p, KB.p).length) continue;
+      const dir = d3(KB.p, KA.p);
+      for (const g of F) {
+        if (chordFaces.has(g)) continue;
+        const C = known.find(k => k !== KA && k !== KB && inF(g, k.p)), den = g.n.dot(dir);
+        if (!C || Math.abs(den) < 1e-9) continue;
+        const T = KA.p.clone().addScaledVector(dir, g.n.dot(d3(g.v0, KA.p)) / den);   // точка прямой в плоскости грани g
+        if (find(T)) continue;
+        const name = '', lineTxt = (KA.aux || KB.aux) ? 'Прямая через эти точки' : 'Прямая ' + sub(KA.name) + sub(KB.name);
+        known.push({ p: T, name, aux: true, used: true }); auxDone.add(key);
+        plan.push({ segs: [{ A: T.distanceTo(KA.p) < T.distanceTo(KB.p) ? KA.p : KB.p, B: T, dashed: true, reveal: { p: T, name: '', isNew: true, aux: true } }],
+          pts: [{ p: T, name, isNew: true, aux: true }], note: '',
+          html: `${ref(KA)} и ${ref(KB)} не лежат в одной грани. ${lineTxt} пересекает плоскость грани ${sub(g.name)}, где лежит ${ref(C)}
+            <small>Через эту прямую проводим вспомогательную плоскость: она пересекает плоскость грани по прямой, а пересечение двух прямых даёт точку, лежащую
+            и в секущей плоскости, и в грани ${sub(g.name)}. Через неё и ${ref(C)} проводим след в грани ${sub(g.name)}.</small>` });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (let guard = 0; guard < 30 && !s.sorted.every(q => find(q)); guard++) {
+    let pr = null;                                              // (а) две точки в одной грани
+    for (let a = 0; a < known.length && !pr; a++) for (let b = a + 1; b < known.length && !pr; b++) {
+      const key = a + '-' + b; if (done.has(key)) continue;
+      const cf = commonF(known[a].p, known[b].p); if (!cf.length) continue;
+      const g = cf.find(g => !chordFaces.has(g));
+      if (g) pr = { a, b, g, key }; else done.add(key);       // в такой грани след уже проведён
+    }
+    if (pr) {
+      done.add(pr.key);
+      const KA = known[pr.a], KB = known[pr.b], { ln, head } = describe(KA, KB, pr.g);
+      const r = makeChord(pr.g, KA.p, d3(KB.p, KA.p), ln, head, KA.p);
+      if (!r) continue;
+      KA.used = KB.used = true;
+      // Порядок рисования (карандаш идёт непрерывно): [пунктир от внешней точки пары] → след → пунктир следа к новой точке → пунктир ребра
+      const c = r.chord, auxK = [KA, KB].find(k => k.aux), nearTo = P => P.distanceTo(c[0]) < P.distanceTo(c[1]) ? 0 : 1;
+      let start = auxK ? nearTo(auxK.p) : 0;
+      const ext = findExt(pr.g, r.hits, c, auxK ? 1 - start : -1);
+      if (ext && !auxK) start = 1 - ext.near;
+      const segs = [];
+      if (auxK) segs.push({ A: auxK.p, B: c[start], dashed: true });
+      segs.push({ A: c[start], B: c[1 - start] });
+      if (ext) {
+        const { T, V, h, g2, C } = ext, pt = { p: T.p, name: '', isNew: true, aux: true };
+        segs.push({ A: c[1 - start], B: T.p, dashed: true, of: T, reveal: pt });   // продление следа до точки пересечения
+        segs.push({ A: T.p, B: V, dashed: true, of: T });                          // продление ребра от ближайшей вершины
+        r.st.pts.push(pt); r.st.aux = T;
+        r.st.note = `<small>Продлеваем след до пересечения с прямой ребра ${nameE(h.i, h.j)} и через полученную точку пересечения проводим прямую в смежную грань ${sub(g2.name)}${C.aux ? '' : ' (к точке ' + sub(C.name) + ')'}.</small>`;
+      }
+      r.st.segs = segs; plan.push(r.st); continue;
+    }
+    const st = tryParallel(); if (st) { plan.push(st); continue; }
+    if (tryAuxPlane()) continue;
+    break;
+  }
+  // Оставшиеся стороны: две вершины в одной грани соединяем отрезком
+  const n = s.sorted.length;
+  s.sorted.forEach((p, i) => {
+    const q = s.sorted[(i + 1) % n], l1 = s.labs[i], l2 = s.labs[(i + 1) % n], cf = commonF(p, q);
+    if (cf.some(g => chordFaces.has(g))) return;
+    if (cf[0]) chordFaces.add(cf[0]);
+    plan.push({ segs: [{ A: p, B: q }], note: '',
+      pts: [{ p, name: l1.name, isNew: l1.isNew }, { p: q, name: l2.name, isNew: l2.isNew }],
+      html: `точки ${sub(l1.name)} и ${sub(l2.name)} лежат в ${cf[0] ? 'грани ' + sub(cf[0].name) : 'одной грани'}. Соединяем их отрезком ${sub(l1.name)}${sub(l2.name)}` });
+  });
+  // Вспомогательные точки, не участвовавшие в построении, не рисуем
+  plan.forEach(st => {
+    if (st.aux && !st.aux.used) { st.segs = st.segs.filter(x => x.of !== st.aux); st.pts = st.pts.filter(x => !x.aux); st.note = ''; }
+    st.html += st.note;
+  });
+  return plan;
+}
+
+/* ---------- Пошаговое построение ---------- */
+const step0Html = () => `Шаг 0: исходные точки ${pts.map(srcName).join(', ')}<small>Нажмите «Следующий шаг» или «Авто».</small>`;
+
+function startSteps() {
+  const s = prepareSection(); if (!s) return;
+  step = { s, plan: buildPlan(s), i: 0, busy: false, done: false, shown: [] };
+  info.innerHTML = step0Html(); syncBtns();
+}
+
+// Линия отрезка от A к B: full=false — нулевой длины (растёт в анимации), full=true — сразу целиком
+function makeLine(sg, full) {
+  const E = full ? sg.B : sg.A, geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute([sg.A.x, sg.A.y, sg.A.z, E.x, E.y, E.z], 3));
+  const mat = sg.dashed ? new THREE.LineDashedMaterial({ color: lineCol(), dashSize: .08, gapSize: .06, transparent: true, opacity: .8 }) : new THREE.LineBasicMaterial({ color: lineCol() });
+  const line = new THREE.Line(geo, mat); line.frustumCulled = false; line.userData.role = 'line';
+  if (sg.dashed) { line.userData.dashed = true; line.computeLineDistances(); }
+  return line;
+}
+function revealPt(q) {
+  if (step.shown.some(x => x.distanceTo(q.p) < 1e-6)) return;
+  step.shown.push(q.p); addSecPoint(q.p, q.name, q.isNew, q.aux);
+}
+
+// «Предыдущий шаг»: мгновенно пересобираем состояние после n шагов
+function goToStep(n) {
+  clearTimeout(autoTimer); auto = false; anim = null; step.busy = false; step.done = false;
+  [...secGroup.children].forEach(o => { secGroup.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  secLabels.forEach(l => l.el.remove()); secLabels = []; step.shown = [];
+  for (let j = 0; j < n; j++) { const st = step.plan[j]; st.segs.forEach(sg => secGroup.add(makeLine(sg, true))); st.pts.forEach(revealPt); }
+  secGroup.children.forEach(o => { o.visible = true; });   // пунктиры текущих шагов снова видны
+  step.i = n;
+  info.innerHTML = n === 0 ? step0Html() : `Шаг ${n}: ${step.plan[n - 1].html}`;
+  syncBtns();
+}
+
+function nextStep() {
+  if (!step || step.busy || step.done) return;
+  const st = step.plan[step.i];
+  if (!st) { step.s.sorted.forEach((p, i) => revealPt({ p, name: step.s.labs[i].name, isNew: step.s.labs[i].isNew }));   // все вершины сечения
+    finishSection(step.s); step.done = true; auto = false; syncBtns(); return; }   // финал: заливка + итог
+  step.i++; step.busy = true;
+  // Порядок в items = порядок рисования; каждый отрезок растёт строго из A в B
+  const items = st.segs.map(sg => { const line = makeLine(sg, false); secGroup.add(line); return { line, A: sg.A, B: sg.B, dashed: !!sg.dashed, reveal: sg.reveal }; });
+  let tip = null;
+  if (items.length) {
+    tip = new THREE.Mesh(new THREE.SphereGeometry(.05, 12, 10), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
+    tip.position.copy(items[0].A); tip.renderOrder = 11; secGroup.add(tip);
+  }
+  info.innerHTML = `Шаг ${step.i}: ${st.html}`;
+  anim = { items, tip, t0: performance.now(), dur: items.length ? 900 * items.length : 500, end() {
+    st.pts.forEach(revealPt);                               // точки появляются, когда «карандаш» дошёл
+    if (tip) secGroup.remove(tip);
+    step.busy = false;
+    if (auto) autoTimer = setTimeout(nextStep, 1000);       // авто-режим: пауза 1 с на каждый шаг
+  } };
+  syncBtns();
+}
+
+// Отрезки рисуются последовательно: k-й растёт из своей точки A в B только в своём отрезке времени,
+// «карандаш» всегда в конце активного отрезка — обратных скачков нет
+function updateAnim(now) {
+  if (!anim) return;
+  const T = Math.min(1, (now - anim.t0) / anim.dur), n = anim.items.length, Xs = [];
+  anim.items.forEach((it, k) => {
+    const r = Math.min(1, Math.max(0, T * n - k)), e = r * r * (3 - 2 * r);
+    const X = it.A.clone().lerp(it.B, e), at = it.line.geometry.attributes.position;
+    at.setXYZ(1, X.x, X.y, X.z); at.needsUpdate = true; Xs.push(X);
+    if (r >= 1 && !it.done) { it.done = true; if (it.reveal) revealPt(it.reveal); }   // серая точка — когда «карандаш» дошёл
+    if (it.dashed) it.line.computeLineDistances();
+  });
+  if (anim.tip && n) anim.tip.position.copy(Xs[Math.min(n - 1, Math.floor(T * n))]);
+  if (T >= 1) { const a = anim; anim = null; a.end(); }
+}
+
+/* ---------- Камера: плавный возврат ---------- */
+function resetCamera() { camAnim = { t0: performance.now(), p: camera.position.clone(), t: controls.target.clone() }; }
+function updateCam(now) {
+  if (!camAnim) return;
+  const t = Math.min(1, (now - camAnim.t0) / 700), e = t * t * (3 - 2 * t);
+  camera.position.lerpVectors(camAnim.p, HOME, e);
+  controls.target.lerpVectors(camAnim.t, new THREE.Vector3(0, 0, 0), e);
+  if (t >= 1) camAnim = null;
+}
+controls.addEventListener('start', () => { camAnim = null; });
+
+/* ============================ СОБЫТИЯ И ЦИКЛ ============================ */
+document.getElementById('build').onclick = buildSection;
+document.getElementById('steps').onclick = startSteps;
+btnPrev.onclick = () => {   // шаг назад: состояние пересобирается мгновенно до нужного шага
+  if (!step || (step.i === 0 && !step.done)) return;
+  goToStep(step.done ? step.i : step.i - 1);
+};
+document.getElementById('cam').onclick = e => { e.stopPropagation(); resetCamera(); };
+document.getElementById('color').onchange = e => { secColor = e.target.value; applyColor(); };
+btnNext.onclick = () => {
+  clearTimeout(autoTimer); auto = false;
+  if (!step) startSteps(); else nextStep();
+  syncBtns();
+};
+btnAuto.onclick = () => {
+  auto = !auto; clearTimeout(autoTimer);
+  if (auto) { if (!step) startSteps(); if (step && !step.busy) nextStep(); else if (!step) auto = false; }
+  syncBtns();
+};
+document.getElementById('reset').onclick = () => { clearSection(); info.textContent = 'Сечение сброшено.'; };
+let streak = 0, lastClick = 0;
+document.getElementById('head').onclick = () => {
+  const now = performance.now(); streak = now - lastClick < 450 ? streak + 1 : 1; lastClick = now;
+  if (streak >= 5) { streak = 0; toast('Автор проекта: Илья (@IL33MA)', 3000); return; }   // 5-й быстрый клик — пасхалка (4 переключения возвращают шторку как была)
+  panel.classList.toggle('closed');
+};
+
+let toastT = 0;
+function toast(text, ms) {
+  const el = document.getElementById('toast'); el.textContent = text; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), ms || 3000);
+}
+
+// Готовые задачи: фигура + положение точек; сечение строится сразу
+const PRESETS = {
+  hex:   { fig: 'cube',  d: [{ m: 'e', e: 'A–B', t: .5 }, { m: 'e', e: 'C–C1', t: .5 }, { m: 'e', e: 'D1–A1', t: .5 }] },
+  trap:  { fig: 'cube',  d: [{ m: 'e', e: 'A–B', t: .5 }, { m: 'e', e: 'D–A', t: .5 }, { m: 'v', v: 'B1' }] },
+  tri:   { fig: 'cube',  d: [{ m: 'v', v: 'B' }, { m: 'v', v: 'D' }, { m: 'v', v: 'A1' }] },
+  tetra: { fig: 'tetra', d: [{ m: 'e', e: 'A–B', t: .5 }, { m: 'e', e: 'B-C', t: 1/3 }, { m: 'e', e: 'C–D', t: .5 }] }
+};
+function applyPreset(key) {
+  const P = PRESETS[key]; if (!P) return;
+  document.querySelectorAll('#figs button').forEach(x => x.classList.toggle('on', x.dataset.f === P.fig));
+  setFigure(P.fig);
+  pts.forEach((p, i) => {
+    const d = P.d[i]; p.name = LAB[i]; p.m = d.m; p.t = d.t != null ? d.t : .5;
+    if (d.m === 'v') p.v = fig.names.indexOf(d.v);
+    else {   // ребро ищем без учёта регистра, вида тире и порядка вершин (A-B = B–A = ab)
+      const targetStr = d.e.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+      p.e = fig.edges.findIndex(([a, b]) => {
+        const s1 = fig.names[a] + fig.names[b], s2 = fig.names[b] + fig.names[a];
+        return s1 === targetStr || s2 === targetStr;
+      });
+    }
+  });
+  buildUI(); updateMarkers(); presetSel.value = key; buildSection();
+}
+presetSel.onchange = () => applyPreset(presetSel.value);
+
+// Снимок: метки на 1 кадр скрываются, сцена сохраняется в PNG (буквы дорисовываются на копии холста)
+document.getElementById('snap').onclick = e => {
+  e.stopPropagation();
+  labelsBox.style.visibility = 'hidden';
+  requestAnimationFrame(() => {
+    renderer.render(scene, camera);
+    const out = document.createElement('canvas'), k = canvas.width / innerWidth;
+    out.width = canvas.width; out.height = canvas.height;
+    const cx = out.getContext('2d'); cx.drawImage(canvas, 0, 0);
+    cx.font = `bold ${Math.round(16 * k)}px system-ui,sans-serif`; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+    cx.lineWidth = 4 * k; cx.strokeStyle = '#000';
+    lastVis.forEach(l => {
+      const t = l.el.textContent; cx.strokeText(t, l.x * k, l.y * k);
+      cx.fillStyle = getComputedStyle(l.el).color; cx.fillText(t, l.x * k, l.y * k);
+    });
+    const a = document.createElement('a');
+    a.href = out.toDataURL('image/png'); a.download = 'stereometry_section.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    labelsBox.style.visibility = '';
+  });
+};
+document.getElementById('figs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  document.querySelectorAll('#figs button').forEach(x => x.classList.toggle('on', x === b));
+  setFigure(b.dataset.f);
+};
+
+const tmp = new THREE.Vector3();
+let lastVis = [];
+// Проекция меток на экран + антиналожение: метки ближе 28 px разводятся
+// (одна выше-левее, другая ниже-правее вдоль линии между ними)
+function placeLabels() {
+  const vis = [];
+  [...vLabels, ...pLabels, ...secLabels].forEach(l => {
+    tmp.copy(l.pos).project(camera);
+    l.el.style.display = tmp.z < 1 ? '' : 'none';
+    if (tmp.z < 1) { l.x = (tmp.x * .5 + .5) * innerWidth; l.y = (-tmp.y * .5 + .5) * innerHeight; vis.push(l); }
+  });
+  for (let it = 0; it < 4; it++) for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+    const a = vis[i], b = vis[j]; let dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d >= 28) continue;
+    if (d < 1) { dx = 1; dy = 1; d = 1.4142; }              // совпали полностью — разводим по диагонали
+    const k = (28 - d) / (2 * d);
+    a.x -= dx * k; a.y -= dy * k; b.x += dx * k; b.y += dy * k;
+  }
+  vis.forEach(l => { l.el.style.left = l.x + 'px'; l.el.style.top = l.y + 'px'; });
+  lastVis = vis;
+}
+function loop() {
+  requestAnimationFrame(loop);
+  updateAnim(performance.now()); updateCam(performance.now());
+  controls.update(); renderer.render(scene, camera);
+  placeLabels();
+}
+console.log('%cРазработано: @IL33MA | 3D Stereometry Project', 'background: #00d2ff; color: #000; font-weight: bold; padding: 4px 8px; border-radius: 4px;');
+setFigure('cube'); resize(); loop();
+</script>
+</body>
+</html>
